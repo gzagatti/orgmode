@@ -9,11 +9,11 @@ local function add_padding(datetime)
   return datetime .. string.rep('.', 11 - datetime:len()) .. ' '
 end
 
----@class AgendaItem
----@field date Date
----@field headline_date Date
----@field real_date Date
----@field headline Section
+---@class OrgAgendaItem
+---@field date OrgDate
+---@field headline_date OrgDate
+---@field real_date OrgDate
+---@field headline OrgHeadline
 ---@field is_valid boolean
 ---@field is_today boolean
 ---@field is_same_day boolean
@@ -23,10 +23,10 @@ end
 ---@field highlights table[]
 local AgendaItem = {}
 
----@param headline_date Date single date in a headline
----@param headline Section
----@param date Date date for which item should be rendered
----@param index number
+---@param headline_date OrgDate single date in a headline
+---@param headline OrgHeadline
+---@param date OrgDate date for which item should be rendered
+---@param index? number
 function AgendaItem:new(headline_date, headline, date, index)
   local opts = {}
   opts.headline_date = headline_date
@@ -55,7 +55,7 @@ function AgendaItem:new(headline_date, headline, date, index)
   return opts
 end
 
----@param headline Section
+---@param headline OrgHeadline
 function AgendaItem:set_headline(headline)
   self.headline = headline
   if self.is_valid then
@@ -83,6 +83,7 @@ function AgendaItem:_generate_data()
     table.insert(self.highlights, highlight)
   end
   self:_add_keyword_highlight()
+  self:_add_priority_highlight()
 end
 
 function AgendaItem:_is_valid_for_today()
@@ -95,6 +96,9 @@ function AgendaItem:_is_valid_for_today()
 
   if self.headline_date:is_deadline() then
     if self.headline:is_done() and config.org_agenda_skip_deadline_if_done then
+      return false
+    end
+    if self.headline_date.is_date_range_end then
       return false
     end
     if self.is_same_day then
@@ -140,6 +144,12 @@ function AgendaItem:_is_valid_for_date()
     if self.headline_date:is_scheduled() and config.org_agenda_skip_scheduled_if_done then
       return false
     end
+  end
+
+  if
+    (self.headline_date:is_deadline() or self.headline_date:is_scheduled()) and self.headline_date.is_date_range_end
+  then
+    return false
   end
 
   if not self.headline_date:is_scheduled() or not self.headline_date:get_negative_adjustment() then
@@ -188,7 +198,7 @@ function AgendaItem:_generate_label()
 end
 
 ---@private
----@param date Date
+---@param date OrgDate
 function AgendaItem:_format_time(date)
   local formatted_time = date:format_time()
 
@@ -238,16 +248,35 @@ function AgendaItem:_generate_highlight()
 end
 
 function AgendaItem:_add_keyword_highlight()
-  if self.headline.todo_keyword.value == '' then
+  local todo_keyword, _, type = self.headline:get_todo()
+  if not todo_keyword then
     return
   end
-  local hlgroup = hl_map[self.headline.todo_keyword.value] or hl_map[self.headline.todo_keyword.type]
+  local hlgroup = hl_map[todo_keyword] or hl_map[type]
   if hlgroup then
     table.insert(self.highlights, {
       hlgroup = hlgroup,
-      todo_keyword = self.headline.todo_keyword.value,
+      todo_keyword = todo_keyword,
     })
   end
+end
+
+function AgendaItem:_add_priority_highlight()
+  local priority, priority_node = self.headline:get_priority()
+  if not priority_node then
+    return
+  end
+  local hlgroup = hl_map.priority[priority].hl_group
+  local last_hl = self.highlights[#self.highlights]
+  local start_col = 2
+  if last_hl and last_hl.todo_keyword then
+    start_col = start_col + last_hl.todo_keyword:len()
+  end
+  table.insert(self.highlights, {
+    hlgroup = hlgroup,
+    priority = priority,
+    start_col = start_col,
+  })
 end
 
 return AgendaItem

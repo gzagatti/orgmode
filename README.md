@@ -8,7 +8,7 @@
   <a href="/LICENSE">![License](https://img.shields.io/badge/license-MIT-brightgreen?style=flat-square)</a><a href="https://ko-fi.com/kristijanhusak"> ![Kofi](https://img.shields.io/badge/support-kofi-00b9fe?style=flat-square&logo=kofi)</a><a href="https://matrix.to/#/#neovim-orgmode:matrix.org"> ![Chat](https://img.shields.io/matrix/neovim-orgmode:matrix.org?logo=matrix&server_fqdn=matrix.org&style=flat-square)</a>
 
 
-  Orgmode clone written in Lua for Neovim 0.9+
+  Orgmode clone written in Lua for Neovim 0.9.2+
 
   [Setup](#setup) • [Docs](/DOCS.md) • [Showcase](#showcase) • [Treesitter](#treesitter-info) • [Troubleshoot](#troubleshoot) • [Plugins](#plugins) • [Contributing](CONTRIBUTING.md) • [Kudos](#thanks-to)
 
@@ -19,7 +19,7 @@
 
 ### Requirements
 
-* Neovim 0.9.0 or later
+* Neovim 0.9.2 or later
 * [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)
 
 ### Installation
@@ -45,7 +45,6 @@ Use your favourite package manager:
     require('nvim-treesitter.configs').setup({
       highlight = {
         enable = true,
-        additional_vim_regex_highlighting = { 'org' },
       },
       ensure_installed = { 'org' },
     })
@@ -96,6 +95,7 @@ call dein#add('nvim-orgmode/orgmode')
 ```
 
 </details>
+
 ### Setup
 
 Note that this setup is not needed for [lazy.nvim](https://github.com/folke/lazy.nvim)
@@ -109,13 +109,8 @@ require('orgmode').setup_ts_grammar()
 
 -- Treesitter configuration
 require('nvim-treesitter.configs').setup {
-  -- If TS highlights are not enabled at all, or disabled via `disable` prop,
-  -- highlighting will fallback to default Vim syntax highlighting
   highlight = {
     enable = true,
-    -- Required for spellcheck, some LaTex highlights and
-    -- code block highlights that do not have ts grammar
-    additional_vim_regex_highlighting = {'org'},
   },
   ensure_installed = {'org'}, -- Or run :TSUpdate org
 }
@@ -136,20 +131,6 @@ require('orgmode').setup_ts_grammar() ...
 EOF
 ```
 #### Completion
-
-<details>
-  <summary><a href="https://github.com/hrsh7th/nvim-compe"><b>nvim-compe</b></a></summary>
-  </br>
-
-```lua
-require('compe').setup({
-  source = {
-    orgmode = true
-  }
-})
-```
-
-</details>
 
 <details>
   <summary><a href="https://github.com/hrsh7th/nvim-cmp"><b>nvim-cmp</b></a></summary>
@@ -295,7 +276,6 @@ More info on issue [#281](https://github.com/nvim-orgmode/orgmode/issues/281#iss
   * Insert/Move/Refile headlines
   * Change tags
   * Toggle checkbox state
-* Clocking time
 * Remote editing from agenda view
 * Repeatable mapping via [vim-repeat](https://github.com/tpope/vim-repeat)
 

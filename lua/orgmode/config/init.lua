@@ -1,12 +1,14 @@
 local instance = {}
 local utils = require('orgmode.utils')
+local fs = require('orgmode.utils.fs')
 local defaults = require('orgmode.config.defaults')
----@type table<string, MapEntry>
+---@type table<string, OrgMapEntry>
 local mappings = require('orgmode.config.mappings')
+local TodoKeywords = require('orgmode.objects.todo_keywords')
 
----@class Config:DefaultConfig
+---@class OrgConfig:OrgDefaultConfig
 ---@field opts table
----@field todo_keywords table
+---@field todo_keywords OrgTodoKeywords
 local Config = {}
 
 ---@param opts? table
@@ -14,7 +16,6 @@ function Config:new(opts)
   local data = {
     opts = vim.tbl_deep_extend('force', defaults, opts or {}),
     todo_keywords = nil,
-    ts_hl_enabled = nil,
   }
   setmetatable(data, self)
   return data
@@ -28,7 +29,7 @@ function Config:__index(key)
 end
 
 ---@param opts table
----@return Config
+---@return OrgConfig
 function Config:extend(opts)
   self.todo_keywords = nil
   opts = opts or {}
@@ -39,6 +40,9 @@ function Config:extend(opts)
     opts.org_priority_default = self.opts.org_priority_default
   end
   self.opts = vim.tbl_deep_extend('force', self.opts, opts)
+  if self.org_startup_indented then
+    self.org_adapt_indentation = not self.org_indent_mode_turns_off_org_adapt_indentation
+  end
   return self
 end
 
@@ -124,22 +128,12 @@ end
 
 function Config:_deprecation_notify(opts)
   local messages = {}
-  if
-    opts.mappings
-    and opts.mappings.org
-    and (opts.mappings.org.org_increase_date or opts.mappings.org.org_decrease_date)
-  then
+  if opts.org_indent_mode and type(opts.org_indent_mode) == 'string' then
     table.insert(
       messages,
-      'org_increase_date/org_decrease_date mappings are deprecated in favor of org_timestamp_up/org_timestamp_down (More granular increase/decrease).'
+      '"org_indent_mode" is deprecated in favor of "org_startup_indented". Check the documentation about the new option.'
     )
-    table.insert(messages, 'See https://github.com/nvim-orgmode/orgmode/blob/tree-sitter/DOCS.md#changelog')
-    if opts.mappings.org.org_increase_date then
-      opts.mappings.org.org_timestamp_up = opts.mappings.org.org_increase_date
-    end
-    if opts.mappings.org.org_decrease_date then
-      opts.mappings.org.org_timestamp_down = opts.mappings.org.org_decrease_date
-    end
+    opts.org_startup_indented = (opts.org_indent_mode == 'indent')
   end
 
   if #messages > 0 then
@@ -148,35 +142,6 @@ function Config:_deprecation_notify(opts)
       utils.echo_warning(table.concat(messages, '\n'))
     end)
   end
-end
-
----@return string[]
-function Config:get_all_files()
-  local all_filenames = {}
-  if self.opts.org_default_notes_file and self.opts.org_default_notes_file ~= '' then
-    local default_full_path = vim.fn.resolve(vim.fn.expand(self.opts.org_default_notes_file, ':p'))
-    table.insert(all_filenames, default_full_path)
-  end
-  local files = self.opts.org_agenda_files
-  if not files or files == '' or (type(files) == 'table' and vim.tbl_isempty(files)) then
-    return all_filenames
-  end
-  if type(files) ~= 'table' then
-    files = { files }
-  end
-
-  local all_files = vim.tbl_map(function(file)
-    return vim.tbl_map(function(path)
-      return vim.fn.resolve(path)
-    end, vim.fn.glob(vim.fn.fnamemodify(file, ':p'), 0, 1))
-  end, files)
-
-  all_files = utils.concat(vim.tbl_flatten(all_files), all_filenames, true)
-
-  return vim.tbl_filter(function(file)
-    local ext = vim.fn.fnamemodify(file, ':e')
-    return ext == 'org' or ext == 'org_archive'
-  end, all_files)
 end
 
 ---@return number
@@ -216,47 +181,16 @@ function Config:get_agenda_span()
   return span
 end
 
+---@return OrgTodoKeywords
 function Config:get_todo_keywords()
   if self.todo_keywords then
-    return vim.deepcopy(self.todo_keywords)
+    return self.todo_keywords
   end
-  local parse_todo = function(val)
-    local value, shortcut = val:match('(.*)%((.)[^%)]*%)$')
-    if value and shortcut then
-      return { value = value, shortcut = shortcut, custom_shortcut = true }
-    end
-    return { value = val, shortcut = val:sub(1, 1):lower(), custom_shortcut = false }
-  end
-  local types = { TODO = {}, DONE = {}, ALL = {}, KEYS = {}, FAST_ACCESS = {}, has_fast_access = false }
-  local type = 'TODO'
-  local has_separator = vim.tbl_contains(self.opts.org_todo_keywords, '|')
-  for i, word in ipairs(self.opts.org_todo_keywords) do
-    if word == '|' then
-      type = 'DONE'
-    else
-      if not has_separator and i == #self.opts.org_todo_keywords then
-        type = 'DONE'
-      end
-      local data = parse_todo(word)
-      if not types.has_fast_access and data.custom_shortcut then
-        types.has_fast_access = true
-      end
-      table.insert(types[type], data.value)
-      table.insert(types.ALL, data.value)
-      types.KEYS[data.value] = {
-        type = type,
-        shortcut = data.shortcut,
-        len = data.value:len(),
-      }
-      table.insert(types.FAST_ACCESS, {
-        value = data.value,
-        type = type,
-        shortcut = data.shortcut,
-      })
-    end
-  end
-  self.todo_keywords = types
-  return types
+  self.todo_keywords = TodoKeywords:new({
+    org_todo_keywords = self.opts.org_todo_keywords,
+    org_todo_keyword_faces = self.opts.org_todo_keyword_faces,
+  })
+  return self.todo_keywords
 end
 
 --- Setup mappings for a given category and buffer
@@ -268,7 +202,7 @@ function Config:setup_mappings(category, buffer)
     vim.b.org_old_cr_mapping = utils.get_keymap({
       mode = 'i',
       lhs = '<CR>',
-      buffer = buffer,
+      buffer = buffer or vim.api.nvim_get_current_buf(),
     })
   end
   if self.opts.mappings.disable_all then
@@ -317,17 +251,37 @@ function Config:parse_archive_location(file, archive_loc)
   -- TODO: Support archive to headline
   local parts = vim.split(archive_loc, '::')
   local archive_location = vim.trim(parts[1])
-  if archive_location:find('%%s') then
-    local file_path = vim.fn.fnamemodify(file, ':p:h')
-    local file_name = vim.fn.fnamemodify(file, ':t')
-    local archive_filename = string.format(archive_location, file_name)
+  if not archive_location:find('%%s') then
+    return vim.fn.fnamemodify(archive_location, ':p')
+  end
+
+  local file_path = vim.fn.fnamemodify(file, ':p:h')
+  local file_name = vim.fn.fnamemodify(file, ':t')
+  local archive_filename = string.format(archive_location, file_name)
+
+  -- If org_archive_location is defined as relative path (example: "archive/%s_archive")
+  -- then we need to prepend the file path to it
+  local is_full_path = fs.substitute_path(archive_filename)
+
+  if not is_full_path then
     return string.format('%s/%s', file_path, archive_filename)
   end
-  return vim.fn.fnamemodify(archive_location, ':p')
+
+  return vim.fn.fnamemodify(archive_filename, ':p')
 end
 
 function Config:is_archive_file(file)
   return vim.fn.fnamemodify(file, ':e') == 'org_archive'
+end
+
+function Config:exclude_tags(tags)
+  if vim.tbl_isempty(self.opts.org_tags_exclude_from_inheritance) then
+    return tags
+  end
+
+  return vim.tbl_filter(function(tag)
+    return not vim.tbl_contains(self.opts.org_tags_exclude_from_inheritance, tag)
+  end, tags)
 end
 
 function Config:get_inheritable_tags(headline)
@@ -343,8 +297,17 @@ function Config:get_inheritable_tags(headline)
   end, headline.tags)
 end
 
+function Config:get_priorities()
+  return {
+    [self.opts.org_priority_highest] = { type = 'highest', hl_group = '@org.priority.highest' },
+    [self.opts.org_priority_default] = { type = 'default', hl_group = '@org.priority.default' },
+    [self.opts.org_priority_lowest] = { type = 'lowest', hl_group = '@org.priority.lowest' },
+  }
+end
+
 function Config:setup_ts_predicates()
-  local todo_keywords = self:get_todo_keywords().KEYS
+  local todo_keywords = self:get_todo_keywords():keys()
+  local valid_priorities = self:get_priorities()
 
   vim.treesitter.query.add_predicate('org-is-todo-keyword?', function(match, _, source, predicate)
     local node = match[predicate[2]]
@@ -354,34 +317,59 @@ function Config:setup_ts_predicates()
     end
 
     return false
-  end, true)
-end
+  end, { force = true })
 
-function Config:ts_highlights_enabled()
-  if self.ts_hl_enabled ~= nil then
-    return self.ts_hl_enabled
-  end
-  self.ts_hl_enabled = false
-  local hl_module = require('nvim-treesitter.configs').get_module('highlight')
-  if not hl_module or not hl_module.enable then
-    return false
-  end
-  if hl_module.disable then
-    if type(hl_module.disable) == 'function' and hl_module.disable('org', vim.api.nvim_get_current_buf()) then
+  vim.treesitter.query.add_predicate('org-is-valid-priority?', function(match, _, source, predicate)
+    local node = match[predicate[2]]
+    local type = predicate[3]
+    if not node then
       return false
     end
 
-    if type(hl_module.disable) == 'table' and vim.tbl_contains(hl_module.disable, 'org') then
+    local text = vim.treesitter.get_node_text(node, source)
+    local is_valid = valid_priorities[text] and valid_priorities[text].type == type
+    if not is_valid then
       return false
     end
-  end
-  self.ts_hl_enabled = true
-  return self.ts_hl_enabled
+    local priority_text = '[#' .. text .. ']'
+    local full_node_text = vim.treesitter.get_node_text(node:parent(), source)
+    if priority_text ~= full_node_text then
+      return false
+    end
+
+    local prev_sibling = node:parent():prev_sibling()
+    -- If first child, consider it valid
+    if not prev_sibling then
+      return true
+    end
+
+    -- If prev sibling has more prev siblings, it means that the prev_sibling is not a todo keyword
+    -- so this priority is not valid
+    if prev_sibling:prev_sibling() then
+      return false
+    end
+
+    local todo_text = vim.treesitter.get_node_text(prev_sibling, source)
+    local is_prev_sibling_todo_keyword = todo_keywords[todo_text] and true or false
+    return is_prev_sibling_todo_keyword
+  end, { force = true })
+
+  vim.treesitter.query.add_directive('org-set-block-language!', function(match, _, bufnr, pred, metadata)
+    local lang_node = match[pred[2]]
+    if not lang_node then
+      return
+    end
+    local text = vim.treesitter.get_node_text(lang_node, bufnr)
+    if not text or vim.trim(text) == '' then
+      return
+    end
+    metadata['injection.language'] = utils.detect_filetype(text) or text
+  end, { force = true })
 end
 
 ---@param content table
----@param option string
----@param prepend_content any
+---@param option? string
+---@param prepend_content? any
 ---@return table
 function Config:respect_blank_before_new_entry(content, option, prepend_content)
   if self.opts.org_blank_before_new_entry[option or 'heading'] then
@@ -390,34 +378,65 @@ function Config:respect_blank_before_new_entry(content, option, prepend_content)
   return content
 end
 
+---Check if buffer should apply indentation
+---@param bufnr number
+---@return boolean
+function Config:should_indent(bufnr)
+  if bufnr > -1 and vim.b[bufnr].org_indent_mode then
+    return not self.opts.org_indent_mode_turns_off_org_adapt_indentation
+  end
+
+  return self.org_adapt_indentation
+end
+
 ---@param amount number
+---@param bufnr number
 ---@return string
-function Config:get_indent(amount)
-  if self.opts.org_indent_mode == 'indent' then
+function Config:get_indent(amount, bufnr)
+  if self:should_indent(bufnr) then
     return string.rep(' ', amount)
   end
+
   return ''
 end
 
----@param content table|string
----@param amount number
-function Config:apply_indent(content, amount)
-  local indent = self:get_indent(amount)
-
-  if indent == '' then
-    return content
+---@param bufnr number
+---@return boolean
+function Config:hide_leading_stars(bufnr)
+  if self.org_hide_leading_stars then
+    return true
   end
 
-  if type(content) ~= 'table' then
-    return indent .. content
+  if vim.b[bufnr].org_indent_mode and self.org_indent_mode_turns_on_hiding_stars then
+    return true
   end
 
-  for i, line in ipairs(content) do
-    content[i] = indent .. line
-  end
-  return content
+  return false
 end
 
----@type Config
+---@param args string
+---@return table<string, string[]>
+function Config:parse_header_args(args)
+  local results = {}
+  local current_argument = nil
+  local list = vim.split(args, '%s+')
+  for _, param in ipairs(list) do
+    local is_header_argument = param:sub(1, 1) == ':'
+    if is_header_argument then
+      results[param:lower()] = {}
+      current_argument = param:lower()
+    elseif current_argument then
+      table.insert(results[current_argument], param)
+    end
+  end
+
+  for name, value in pairs(results) do
+    results[name] = table.concat(value, ' ')
+  end
+
+  return results
+end
+
+---@type OrgConfig
 instance = Config:new()
 return instance

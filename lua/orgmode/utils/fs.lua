@@ -1,6 +1,6 @@
 local utils = require('orgmode.utils')
 
-M = {}
+local M = {}
 
 ---@param path_str string
 ---@return string | false
@@ -10,12 +10,14 @@ function M.substitute_path(path_str)
   elseif path_str:match('^~/') then
     local home_path = os.getenv('HOME')
     return home_path and path_str:gsub('^~', home_path) or false
-  elseif path_str:match('^./') then
+  elseif path_str:match('^%./') then
     local base = vim.fn.fnamemodify(utils.current_file_path(), ':p:h')
-    return base .. '/' .. path_str:gsub('^./', '')
-  else
-    return false
+    return base .. '/' .. path_str:gsub('^%./', '')
+  elseif path_str:match('^%.%./') then
+    local base = vim.fn.fnamemodify(utils.current_file_path(), ':p:h')
+    return base .. '/' .. path_str
   end
+  return false
 end
 
 ---@param filepath string
@@ -34,7 +36,7 @@ end
 function M.get_current_file_dir()
   local current_file = utils.current_file_path()
   local current_dir = vim.fn.fnamemodify(current_file, ':p:h')
-  return current_dir
+  return current_dir or ''
 end
 
 return M

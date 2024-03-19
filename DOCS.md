@@ -25,7 +25,8 @@
 10. [Advanced search](#advanced-search)
 11. [Notifications (experimental)](#notifications-experimental)
 12. [Clocking](#clocking)
-13. [Changelog](#changelog)
+13. [Extract source code (tangle)](#extract-source-code-tangle)
+14. [Changelog](#changelog)
 
 ## Getting started with Orgmode
 To get a basic idea how Orgmode works, look at this screencast from [@dhruvasagar](https://github.com/dhruvasagar)
@@ -74,6 +75,13 @@ Examples (With fast access):
 
 NOTE: Make sure fast access keys do not overlap. If that happens, first entry in list gets it.
 
+#### **org_todo_repeat_to_state**
+*type*: `string|nil`<br />
+*default value*: `nil`<br />
+Set a [org_todo_keyword](#org-todo-keywords) to use as the "starting" state for repeatable todos.<br />
+
+The keyword set here **must** exist in the [org_todo_keywords](#org-todo-keywords) list, otherwise the first one defined will be used.
+
 #### **win_split_mode**
 *type*: `string|function|table`<br />
 *default value*: `horizontal`<br />
@@ -91,7 +99,8 @@ Here are few examples:<br />
 Open in float window:
 ```lua
 win_split_mode = function(name)
-  local bufnr = vim.api.nvim_create_buf(false, true)
+  -- Make sure it's not a scratch buffer by passing false as 2nd argument
+  local bufnr = vim.api.nvim_create_buf(false, false)
   --- Setting buffer name is required
   vim.api.nvim_buf_set_name(bufnr, name)
 
@@ -224,7 +233,7 @@ Enabled:
 If this highlight group does not suit you, you can apply different highlight group to it:
 
 ```lua
-vim.cmd[[autocmd ColorScheme * hi link OrgHideLeadingStars MyCustomHlGroup]]
+vim.cmd[[autocmd ColorScheme * hi link @org.leading.stars MyCustomHlGroup]]
 ```
 
 #### **org_hide_emphasis_markers**
@@ -237,14 +246,15 @@ Ensure your `:h conceallevel` is set properly in order for this to function.
 *type*: `string`<br />
 *default value*: `...`<br />
 Marker used to indicate a folded headline.
+Not applicable with new empty `foldtext` options in Neovim
 
 #### **org_log_done**
-*type*: `string|nil`<br />
+*type*: `string|false`<br />
 *default value*: `time`<br />
 Possible values:
 * `time` - adds `CLOSED` date when marking headline as done
 * `note` - adds `CLOSED` date as above, and prompts for closing note via capture window. Confirm note with `org_note_finalize` (Default `<C-c>`), or ignore providing note via `org_note_kill` (Default `<Leader>ok`)
-* `nil|false` - Disable any logging
+* `false` - Disable any logging
 
 #### **org_log_into_drawer**
 *type*: `string|nil`<br />
@@ -265,12 +275,54 @@ Possible values:
   * between `\[` and `\]` delimiters - example: `\[ a=-\sqrt{2} \]`
   * between `\(` and `\)` delimiters - example: `\( b=2 \)`
 
-#### **org_indent_mode**
-*type*: `string`<br />
-*default value*: `indent`<br />
+**This option requires setting `additional_vim_regex_highlighting = {'org'}` in tree-sitter configuration since its old Vim syntax**:
+```lua
+require('nvim-treesitter.configs').setup {
+  highlight = {
+    enable = true,
+    additional_vim_regex_highlighting = {'org'}, -- This line is needed
+  },
+  ensure_installed = {'org'},
+}
+```
+
+#### **org_startup_indented**
+
+*type*: `boolean`<br />
+*default value*: `false`<br />
 Possible values:
-* `indent` - Use default indentation that follows headlines/checkboxes/previous line indent
-* `noindent` - Disable indentation. All lines start from 1st column
+* `true` - Uses *Virtual* indents to align content visually. The indents are only visual, they are not saved to the file.
+* `false` - Do not add any *Virtual* indentation.
+
+You can toggle Virtual indents on the fly by setting `vim.b.org_indent_mode` to either `true` or `false` when in a org
+buffer. For example, if virtual indents were enabled in the current buffer then you could disable them immediately by
+setting `vim.b.org_indent_mode = false`.
+
+This feature has no effect when enabled on Neovim versions < 0.10.0
+
+#### **org_adapt_indentation**
+
+*type*: `boolean`<br />
+*default value*: `true`<br />
+Possible values:
+* `true` - Use *hard* indents for content under headlines. Files will save with indents relative to headlines.
+* `false` - Do not add any *hard* indents. Files will save without indentation relative to headlines.
+
+#### **org_indent_mode_turns_off_org_adapt_indentation**
+
+*type*: `boolean`<br />
+*default value*: `true`<br />
+Possible values:
+* `true` - Disable [`org_adapt_indentation`](#org_adapt_indentation) by default when [`org_startup_indented`](#org_startup_indented) is enabled.
+* `false` - Do not disable [`org_adapt_indentation`](#org_adapt_indentation) by default when [`org_startup_indented`](#org_startup_indented) is enabled.
+
+#### **org_indent_mode_turns_on_hiding_stars**
+
+*type*: `boolean`<br />
+*default value*: `true`<br />
+Possible values:
+* `true` - Enable [`org_hide_leading_stars`](#org_hide_leading_stars) by default when [`org_indent_mode`](#org_startup_indented) is enabled for buffer (`vim.b.org_indent_mode = true`).
+* `false` - Do not modify the value in [`org_hide_leading_stars`](#org_hide_leading_stars) by default when [`.org_indent_mode`](#org_startup_indented) is enabled for buffer (`vim.b.org_indent_mode = true`).
 
 #### **org_src_window_setup**
 *type*: `string|function`<br />
@@ -344,6 +396,39 @@ Determine if blank line should be prepended when:
 * Adding heading via `org_meta_return` and `org_insert_*` mappings
 * Adding a list item via `org_meta_return`
 
+#### **org_id_uuid_program**
+*type*: `string`<br />
+*default value*: `uuidgen`<br />
+External program used to generate uuid's for id module
+
+#### **org_id_ts_format**
+*type*: `string`<br />
+*default value*: `%Y%m%d%H%M%S`<br />
+Format of the id generated when [org_id_method](#org_id_method) is set to `ts`.
+
+#### **org_id_method**
+*type*: `'uuid' | 'ts' | 'org'`<br />
+*default value*: `uuid`<br />
+What method to use to generate ids via org id module.
+* `uuid` - Use [org_id_uuid_program](#org_id_uuid_program) to generate the id
+* `ts` - Generate id from current timestamp using format [org_id_ts_format](#org_id_ts_format)
+* `org` - Generate a random 12 digit number and prepend [org_id_prefix](#org_id_prefix)
+
+#### **org_id_prefix**
+*type*: `string | nil`<br />
+*default value*: `nil`<br />
+Prefix added to the generated id when [org_id_method](#org_id_method) is set to `org`.
+
+#### **org_id_link_to_org_use_id**
+*type*: `boolean`<br />
+*default value*: `false`<br />
+If `true`, generate ID with the Org ID module and append it to the headline as property. More info on [org_store_link](#org_store_link)
+
+#### **org_babel_default_header_args**
+*type*: `table<string, string>`<br />
+*default value*: `{ [':tangle'] = 'no', [':noweb']  = no }`<br />
+Default header args for extracting source code. See [Extract source code (tangle)](#extract-source-code-tangle) for more details.
+
 #### **calendar_week_start_day**
 *type*: `number`<br />
 *default value*: `1`<br />
@@ -412,6 +497,46 @@ Variables:
   * `%^{PROMPT|DEFAULT|COMPLETION...}`: Prompt for input, if completion is provided an :h inputlist will be used
   * `%(EXP)`: Runs the given lua code and inserts the result. NOTE: this will internally pass the content to the lua `load()` function. So the body inside `%()` should be the body of a function that returns a string.
 
+Templates have the following fields:
+  * `description` (`string`) — description of the template that is displayed in the template selection menu
+  * `template` (`string|string[]`) — body of the template that will be used when creating capture
+  * `target` (`string?`) — name of the file to which the capture content will be added. If the target is not specified, the content will be added to the [`org_default_notes_file`](#orgdefaultnotesfile) file
+  * `headline` (`string?`) — title of the headline after which the capture content will be added. If no headline is specified, the content will be appended to the end of the file
+  * `datetree (boolean | { time_prompt?: boolean, reversed?: boolean, tree_type: 'day' | 'month' | 'week' | 'custom' })` — Create a [date tree](https://orgmode.org/manual/Template-elements.html#FOOT84) with current day in the target file and put the capture content there.
+    * `true` - Create ascending datetree (newer dates go to end) with the current date
+    * `{ time_prompt = true, reversed?: boolean }` - open up a date picker to select a date before opening up a capture buffer
+    * `{ reversed: true }` - add entries in reversed order (newer dates comes first)
+    * `{ tree_type: 'day' | 'month' | 'week' | 'custom' }` - Which date tree type to use:
+      * `day` - Create year -> month -> day structure, and refile headlines in the day headline
+      * `month` - Create year -> month structure, and refile headlines in the month headline
+      * `week` - Create year -> week number structure, and refile headlines in the week number headline
+      * `custom` (**Advanced**) - Create custom datetree with own date formats. This requires adding `tree` property in the `datetree` opts. Example with year and month tree:
+        ```lua
+        datetree = {
+          tree_type = 'custom',
+          tree = {
+            {
+              format = '%Y',
+              pattern = '^(%d%d%d%d)$',
+              order = { 1 }
+            },
+            {
+              format = '%Y-%m',
+              pattern = '^(%d%d%d%d)%-(%d%d)$',
+              order = { 1, 2 }
+            }
+          }
+        }
+        ```
+      Check [this line in source](https://github.com/nvim-orgmode/orgmode/blob/master/lua/orgmode/capture/template/datetree.lua#L144) for builtin tree types
+      and detailed explanation how to add own tree.
+  * `regexp (string)` — Search for specific line in the target file via regex (same as searching through file from command), and append the content after that line.
+    For example, if you have line `appendhere` in target file, put this option to `^appendhere$` to add headlines after that line
+  * `properties` (`table?`):
+    * `empty_lines` (`table|number?`) — if the value is a number, then empty lines are added before and after the content. If the value is a table, then the following fields are expected:
+      * `before` (`integer?`) — add empty lines to the beginning of the content
+      * `after` (`integer?`) — add empty lines to the end of the content
+
 Example:<br />
   ```lua
   { T = {
@@ -423,20 +548,24 @@ Example:<br />
 
 Journal example:<br />
   ```lua
-  { j = {
-    description = 'Journal',
-    template = '\n*** %<%Y-%m-%d> %<%A>\n**** %U\n\n%?',
-    target = '~/sync/org/journal.org'
-  } }
+  {
+    j = {
+      description = 'Journal',
+      template = '\n*** %<%Y-%m-%d> %<%A>\n**** %U\n\n%?',
+      target = '~/sync/org/journal.org'
+    },
+  }
   ```
 
 Journal example with dynamic target, i.e. a separate file per month:<br />
   ```lua
-  { J = {
-    description = 'Journal',
-    template = '\n*** %<%Y-%m-%d> %<%A>\n**** %U\n\n%?',
-    target = '~/sync/org/journal/%<%Y-%m>.org'
-  } }
+  {
+    J = {
+      description = 'Journal',
+      template = '\n*** %<%Y-%m-%d> %<%A>\n**** %U\n\n%?',
+      target = '~/sync/org/journal/%<%Y-%m>.org'
+    },
+  }
   ```
 
 Nested key example:<br />
@@ -456,16 +585,38 @@ Nested key example:<br />
       headline = 'one-time'
     }
   }
+  -- or
+  {
+    e = {
+      description = 'Event',
+      subtemplates = {
+        r = {
+          description = 'recurring',
+          template = '** %?\n %T',
+          target = '~/org/calendar.org',
+          headline = 'recurring'
+        },
+        o = {
+          description = 'one-time',
+          template = '** %?\n %T',
+          target = '~/org/calendar.org',
+          headline = 'one-time'
+        },
+      },
+    },
+  }
   ```
 
 Lua expression example:<br />
   ```lua
-  { j = {
-    description = 'Journal',
-    template = '* %(return vim.fn.getreg "w")',
-    -- get the content of register "w"
-    target = '~/sync/org/journal.org'
-  } }
+  {
+    j = {
+      description = 'Journal',
+      template = '* %(return vim.fn.getreg "w")',
+      -- get the content of register "w"
+      target = '~/sync/org/journal.org'
+    },
+  }
   ```
 
 #### **org_agenda_min_height**
@@ -565,7 +716,57 @@ require('orgmode').setup({
 })
 ```
 
-**NOTE**: All mappings are normal mode mappings (`nnoremap`)
+To disable a specific mapping, set it's value to `false`:
+
+```lua
+require('orgmode').setup({
+  org_agenda_files = {'~/Dropbox/org/*', '~/my-orgs/**/*'},
+  org_default_notes_file = '~/Dropbox/org/refile.org',
+  mappings = {
+    global = {
+      org_agenda = false,
+      org_capture = 'gC'
+    },
+    agenda = {
+      org_agenda_later = false
+    }
+  }
+})
+```
+
+You can find the configuration file that holds all default mappings [here](./lua/orgmode/config/mappings/init.lua)
+
+**NOTE**: All mappings are normal mode mappings (`nnoremap`) with exception of `org_return`
+
+### Use Enter in insert mode to add list items/checkboxes/todos
+By default, adding list items/checkboxes/todos is done with [org_meta_return](#org_meta_return) which is a normal mode mapping.
+If you want to have an insert mode mapping there are two options:
+
+1. If your terminal supports it, map a key like `Shift + Enter` to the meta return mapping (Recommended):
+```lua
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = 'org',
+  callback = function()
+    vim.keymap.set('i', '<S-CR>', '<cmd>lua require("orgmode").action("org_mappings.meta_return")<CR>', {
+      silent = true,
+      buffer = true,
+    })
+  end,
+})
+```
+2. If you want to use only enter, enable `org_return_uses_meta_return` option:
+```lua
+require('orgmode').setup({
+  org_agenda_files = {'~/Dropbox/org/*', '~/my-orgs/**/*'},
+  org_default_notes_file = '~/Dropbox/org/refile.org',
+  mappings = {
+    org_return_uses_meta_return = true
+  }
+})
+```
+This will trigger `org_meta_return` if there is no content after the cursor position (either at the end of line or has just trailing spaces).
+Just note that this option always tries to use `meta_return`, which also adds new headlines
+automatically if you are on the headline line, which can give undesired results.
 
 ### Global mappings
 
@@ -696,6 +897,10 @@ Insert/Update deadline date on current headline item.<br />
 #### **org_agenda_schedule**
 *mapped to*: `<Leader>ois`<br />
 Insert/Update scheduled date on current headline item.<br />
+#### **org_agenda_refile**
+*mapped to*: `<Leader>or`<br />
+Refile current headline to a destination org-file.
+Same as [org_refile](#org_refile) but from agenda view.
 #### **org_agenda_filter**
 *mapped to*: `/`<br />
 Open prompt that allows filtering current agenda view by category, tags and title (vim regex, see `:help vim.regex()`)<br />
@@ -840,8 +1045,15 @@ Toggle current line checkbox state
 *mapped to*: `<Leader>o*`<br />
 Toggle current line to headline and vice versa. Checkboxes will turn into TODO headlines.
 #### **org_insert_link**
-*mapped to*: `<Leader>oil`<br />
+*mapped to*: `<Leader>oli`<br />
 Insert a hyperlink at cursor position. When the cursor is on a hyperlink, edit that hyperlink.<br />
+If there are any links stored with [org_store_link](#org_store_link), pressing `<TAB>` to autocomplete the input
+will show list of all stored links to select. Links generated with ID are properly expanded to valid links after selection.
+#### **org_store_link**
+*mapped to*: `<Leader>ols`<br />
+Generate a link to the closest headline. If [org_id_link_to_org_use_id](#org_id_link_to_org_use_id) is `true`,
+it appends the `ID` property to the headline, and generates link with that id to be inserted via [org_insert_link](#org_insert_link).
+When [org_id_link_to_org_use_id](#org_id_link_to_org_use_id) is `false`, it generates the standard file::*headline link (example: `file:/path/to/my/todos.org::*My headline`)
 #### **org_open_at_point**
 *mapped to*: `<Leader>oo`<br />
 Open hyperlink or date under cursor. When date is under the cursor, open the agenda for that day.<br />
@@ -947,6 +1159,9 @@ See [Clocking](#clocking) for more details.
 *mapped to*: `<Leader>oxe`<br />
 Set effort estimate property on for current headline.<br />
 See [Clocking](#clocking) for more details.
+#### **org_babel_tangle**
+*mapped to*: `<leader>obt`<br />
+Tangle current file. See [Extract source code (tangle)](#extract-source-code-tangle) for more details.
 #### **org_show_help**
 *mapped to*: `g?`<br />
 Show help popup with mappings
@@ -1037,6 +1252,12 @@ require('orgmode').setup({
 })
 ```
 
+#### **markup text objects**
+Mappings to select inner/outer markup entries. For example, having `This is *bold*`, and if cursor is in middle of `*bold*`, doing `ci*` changes only inner text,
+and doing `ca*` changes outer text.
+These are supported: `*`, `_`, `/`, `+`, `~`, `=`
+These cannot be changed.
+
 ### Dot repeat
 To make all mappings dot repeatable, install [vim-repeat](https://github.com/tpope/vim-repeat) plugin.
 
@@ -1069,11 +1290,13 @@ The format for links is either `[[LINK]]` or `[[LINK][DESCRIPTION]]`. If a descr
 
 Hyperlink types supported:
 * URL (http://, https://)
-* File (starts with `file:`. Example: `file:/home/user/.config/nvim/init.lua`) Optionally, a line number can be specified
-using the '+' character (Example: `file:/home/user/.config/nvim/init.lua +10`) or a headline within the specified file using '::' (Example: `file:/home/user/org/file.org::*Specific Headline`)
-* Headline title target within the same file (starts with `*`)
-* Headline with `CUSTOM_ID` property within the same file (starts with `#`)
-* Fallback: If file path, opens the file, otherwise, tries to find the headline title.
+* File (starts with `file:`. Example: `file:/home/user/.config/nvim/init.lua`) Optionally, target can be specified:
+  * Headline - It needs to start with `*` (Example: `file:/home/user/org/file.org::*Specific Headline`)
+  * Custom id - It needs to start with `#` (Example: `file:/home/user/org/file.org::#my-custom-id`)
+  * Line number - It needs to be a number (Example: `file:/home/user/org/file.org::235`)
+* Headline title target within the same file (starts with `*`) (Example: `*Specific headline`)
+* Headline with `CUSTOM_ID` property within the same file (starts with `#`) (Example: `#my-custom-id`)
+* Fallback: If file path, opens the file, otherwise, tries to find the headline title in the current file.
 
 ## Autocompletion
 By default, `omnifunc` is provided in `org` files that autocompletes these types:
@@ -1083,15 +1306,6 @@ By default, `omnifunc` is provided in `org` files that autocompletes these types
 * Planning keywords (`DEADLINE`, `SCHEDULED`, `CLOSED`)
 * Orgfile special keywords (`#+TITLE`, `#+BEGIN_SRC`, `#+ARCHIVE`, etc.)
 * Hyperlinks (`* - headlines`, `# - headlines with CUSTOM_ID property`, `headlines matching title`)
-
-If you use [nvim-compe](https://github.com/hrsh7th/nvim-compe) add this to compe setup:
-```lua
-  require'compe'.setup({
-    source = {
-      orgmode = true
-    }
-  })
-```
 
 For [nvim-cmp](https://github.com/hrsh7th/nvim-cmp), add `orgmode` to list of sources:
 ```lua
@@ -1151,58 +1365,96 @@ Currently, these things are formatted:
 ## User interface
 
 ### Colors
+Most of the highlight groups are linked to treesitter highlights where applicable (see `:h treesitter-highlight`).
+
+The following highlight groups are used:
+
+  * `@org.headline.level1`: Headline at level 1 - linked to `Title`
+  * `@org.headline.level2`: Headline at level 2 - linked to `Constant`
+  * `@org.headline.level3`: Headline at level 3 - linked to `Identifier`
+  * `@org.headline.level4`: Headline at level 4 - linked to `Statement`
+  * `@org.headline.level5`: Headline at level 5 - linked to `PreProc`
+  * `@org.headline.level6`: Headline at level 6 - linked to `Type`
+  * `@org.headline.level7`: Headline at level 7 - linked to `Special`
+  * `@org.headline.level8`: Headline at level 8 - linked to `String`
+  * `@org.priority.highest`: Highest priority marker - linked to `@comment.error`
+  * `@org.priority.default`: Default priority marker - Not linked to anything, defaults to normal text
+  * `@org.priority.lowest`: Lowest priority marker - Not linked to anything, defaults to normal text
+  * `@org.timestamp.active`: An active timestamp - linked to `@keyword`
+  * `@org.timestamp.inactive`: An inactive timestamp - linked to `@comment`
+  * `@org.keyword.todo`: TODO keywords color - Parsed from `Error` (see note below)
+  * `@org.keyword.done`: DONE keywords color - Parsed from `DiffAdd` (see note below)
+  * `@org.bullet`: A normal bullet under a header item - linked to `@markup.list`
+  * `@org.properties`: Property drawer start/end delimiters - linked to `@property`
+  * `@org.drawer`: Drawer start/end delimiters - linked to `@property`
+  * `@org.tag`: A tag for a headline item, shown on the righthand side like `:foo:` - linked to `@tag.attribute`
+  * `@org.plan`: `SCHEDULED`, `DEADLINE`, `CLOSED`, etc. keywords - linked to `Constant`
+  * `@org.comment`: A comment block - linked to `@comment`
+  * `@org.latex_env`: LaTeX block - linked to `@markup.environment`
+  * `@org.directive`: Blocks starting with `#+` - linked to `@comment`
+  * `@org.checkbox`: The default checkbox highlight, including square brackets - linked to `@markup.list.unchecked`
+  * `@org.checkbox.halfchecked`: A checkbox status (marker between `[]`) checked with `[-]` - linked to `@markup.list.unchecked`
+  * `@org.checkbox.checked`: A checkbox status (marker between `[]`) checked with either `[x]` or `[X]` - linked to `@markup.list.checked`
+  * `@org.bold`: **bold** text - linked to `@markup.strong`,
+  * `@org.bold.delimiter`: bold text delimiter `*` - linked to `@markup.strong`,
+  * `@org.italic`: *italic* text - linked to `@markup.italic`,
+  * `@org.italic.delimiter`: italic text delimiter `/` - linked to `@markup.italic`,
+  * `@org.strikethrough`: ~strikethrough~ text - linked to `@markup.strikethrough`,
+  * `@org.strikethrough.delimiter`: strikethrough text delimiter `+` - linked to `@markup.strikethrough`,
+  * `@org.underline`: <u>underline<u/> text - linked to `@markup.underline`,
+  * `@org.underline.delimiter`: underline text delimiter `_` - linked to `@markup.underline`,
+  * `@org.code`: `code` text - linked to `@markup.raw`,
+  * `@org.code.delimiter`: code text delimiter `~` - linked to `@markup.raw`,
+  * `@org.verbatim`: `verbatim` text - linked to `@markup.raw`,
+  * `@org.verbatim.delimiter`: verbatim text delimiter `=` - linked to `@markup.raw`,
+  * `@org.hyperlink`: [link](link) text - linked to `@markup.link.url`,
+  * `@org.latex`: Inline latex - linked to `@markup.math`,
+  * `@org.table.delimiter` - `|` and `-` delimiters in tables - linked to `@punctuation.special`,
+  * `@org.table.heading` - Table headings - linked to `@markup.heading`,
+  * `@org.edit_src` - The highlight for the source content in an _Org_ buffer while it is being edited in an edit special buffer - linked to `Visual`,
+  * `@org.agenda.deadline`: A item deadline in the agenda view - Parsed from `Error` (see note below)
+  * `@org.agenda.scheduled`: A scheduled item in the agenda view - Parsed from `DiffAdd` (see note dbelow)
+  * `@org.agenda.scheduled_past`: A item past its scheduled date in the agenda view - Parsed from `WarningMsg` (see note below)
+  * `@org.agenda.day`: Highlight for all days in Agenda view - linked to `Statement`
+  * `@org.agenda.today`: Highlight for today in Agenda view - linked to `@org.bold`
+  * `@org.agenda.weekend`: Highlight for weekend days in Agenda view - linked to `@org.bold`
+
+Note:
+
 Colors used for todo keywords and agenda states (deadline, schedule ok, schedule warning)
-are parsed from the current colorsheme from several highlight groups (Error, WarningMsg, DiffAdd, etc.).
-If those colors are not suitable you can override them like this:
+are parsed from the current colorscheme from several highlight groups (Error, WarningMsg, DiffAdd, etc.).
+
+
+#### Overriding colors
+All colors can be overridden by either setting new values or linking to another highlight group:
+```lua
+vim.api.nvim_create_autocmd('ColorScheme', {
+  pattern = '*',
+  callback = function()
+    -- Define own colors
+    vim.api.nvim_set_hl(0, '@org.agenda.deadline', { fg = '#FFAAAA' })
+    vim.api.nvim_set_hl(0, '@org.agenda.scheduled', { fg = '#AAFFAA' })
+    -- Link to another highlight group
+    vim.api.nvim_set_hl(0, '@org.agenda.scheduled_past', { link = 'Statement' })
+  end
+})
+```
+
+Or in Vimscript:
 
 ```vim
 autocmd ColorScheme * call s:setup_org_colors()
 
 function! s:setup_org_colors() abort
-  hi OrgAgendaDeadline guifg=#FFAAAA
-  hi OrgAgendaScheduled guifg=#AAFFAA
-  hi OrgAgendaScheduledPast guifg=Orange
-endfunction
-```
-
-or you can link it to another highlight group:
-
-```vim
-function! s:setup_org_colors() abort
-  hi link OrgAgendaDeadline Error
-  hi link OrgAgendaScheduled DiffAdd
-  hi link OrgAgendaScheduledPast Statement
+  " Define own colors
+  hi @org.agenda.deadline guifg=#FFAAAA
+  hi @org.agenda.scheduled guifg=#AAFFAA
+  " Link to another highlight group
+  hi link @org.agenda.scheduled_past Statement
 endfunction
 ```
 
 For adding/changing TODO keyword colors see [org-todo-keyword-faces](#org_todo_keyword_faces)
-
-#### Highlight Groups
-
-* The following highlight groups are based on _Treesitter_ query results, hence when setting up _Orgmode_ these
-  highlights must be enabled by removing `disable = {'org'}` from the default recommended _Treesitter_ configuration.
-
-  * `OrgTSTimestampActive`: An active timestamp
-  * `OrgTSTimestampInactive`: An inactive timestamp
-  * `OrgTSBullet`: A normal bullet under a header item
-  * `OrgTSPropertyDrawer`: Property drawer start/end delimiters
-  * `OrgTSDrawer`: Drawer start/end delimiters
-  * `OrgTSTag`: A tag for a headline item, shown on the righthand side like `:foo:`
-  * `OrgTSPlan`: `SCHEDULED`, `DEADLINE`, `CLOSED`, etc. keywords
-  * `OrgTSComment`: A comment block
-  * `OrgTSLatex`: LaTeX block
-  * `OrgTSDirective`: Blocks starting with `#+`
-  * `OrgTSCheckbox`: The default checkbox highlight, overridden if any of the below groups are specified
-  * `OrgTSCheckboxChecked`: A checkbox checked with either `[x]` or `[X]`
-  * `OrgTSCheckboxHalfChecked`: A checkbox checked with `[-]`
-  * `OrgTSCheckboxUnchecked`: A empty checkbox
-
-* The following use vanilla _Vim_ syntax matching, and will work without _Treesitter_ highlighting enabled.
-
-  * `OrgEditSrcHighlight`: The highlight for the source content in an _Org_ buffer while it is being edited in an edit special buffer
-  * `OrgAgendaDeadline`: A item deadline in the agenda view
-  * `OrgAgendaScheduled`: A scheduled item in the agenda view
-  * `OrgAgendaScheduledPast`: A item past its scheduled date in the agenda view
 
 ### Menu
 
@@ -1400,6 +1652,13 @@ In order to trigger notifications via cron, job needs to be added to the crontab
 This is currently possible only on Linux and MacOS, since I don't know how would this be done on Windows. Any help on this topic is appreciated. <br />
 This works by starting the headless Neovim instance, running one off function inside orgmode, and quitting the Neovim.
 
+First try to see if you can run this command:
+```
+nvim --headless -c 'lua require("orgmode").cron()'
+```
+
+If it exits without errors, you are ready!
+
 Here's maximum simplified **Linux** example (Tested on Manjaro/Arch/Ubuntu), but least optimized:
 
 Run this to open crontab:
@@ -1409,31 +1668,36 @@ crontab -e
 
 Then add this (Ensure path to `nvim` is correct):
 ```crontab
-* * * * * DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /usr/local/bin/nvim --headless --noplugin -c 'lua require("orgmode").cron()'
+* * * * * DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /usr/local/bin/nvim --headless -c 'lua require("orgmode").cron()'
 ```
 
-More optimized way would be to extract all your orgmode config to a separate file in your neovim configuration:
+More optimized version would be to create a lua file that has only necessary plugins loaded:
 ```lua
--- ~/.config/nvim/lua/partials/my_org_config.lua
-return {
+-- ~/.config/nvim/lua/partials/org_cron.lua
+
+-- If you are using lazy.vim do this:
+local treesitter = vim.fn.stdpath('data') .. '/lazy/nvim-treesitter'
+local orgmode = vim.fn.stdpath('data') .. '/lazy/orgmode'
+vim.opt.runtimepath:append(orgmode)
+vim.opt.runtimepath:append(treesitter)
+-- If you are using Packer or any other package manager that uses built-in package manager, do this:
+vim.cmd('packadd nvim-treesitter')
+vim.cmd('packadd orgmode')
+
+-- Run the orgmode cron
+require('orgmode').cron({
   org_agenda_files = '~/orgmode/*',
   org_default_notes_file = '~/orgmode/notes.org',
   notifications = {
     reminder_time = {0, 5, 10},
   },
-  -- etc.
-}
-```
-
-Have your default setup load this configuration:
-```
-require('orgmode').setup(require('partials.my_org_config'))
+})
 ```
 
 And update cron job to this:
 
 ```crontab
-* * * * * DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /usr/local/bin/nvim -u NONE --noplugin --headless -c 'lua require("orgmode").cron(require("partials.my_org_config"))'
+* * * * * DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /usr/local/bin/nvim -u NONE --noplugin --headless -c 'lua require("partials.org_cron")'
 ```
 This option is most optimized because it doesn't load plugins and your init.vim
 
@@ -1483,8 +1747,100 @@ Show the currently clocked in headline (if any), with total clocked time / effor
 set statusline=%{v:lua.orgmode.statusline()}
 ```
 
+## Extract source code (tangle)
+There is basic support for extracting source code with `tangle` and `noweb` (Orgmode link: [Extracting source code](https://orgmode.org/manual/Extracting-Source-Code.html)).
+These options are supported:
+
+1. Setting `header-args` on multiple levels:
+   1. Configuration ([org_babel_default_header_args](#org_babel_default_header_args))
+   2. File level property (`#+property: header-args :tangle yes`)
+   3. Headline level property
+      ```org
+      * Headline
+        :PROPERTIES:
+        :header-args: :tangle yes
+        :END:
+      ```
+   4. Block level argument
+      ```org
+      #+begin_src lua :tangle yes
+      print('test')
+      #+end_src
+      ```
+2. Tangling all blocks with these options:
+   1. `:tangle no` - Do not tangle
+   2. `:tangle yes` - Tangle to same filename as current org file, with different extension (If org file is `~/org/todo.org` and block is `#+block_src lua`, tangles to `/org/todo.lua`)
+   3. `:tangle path` - Tangle to given filename. It can be absolute (`:tangle /path/to/file.ext`) or relative to current file (either `:tangle ./file.ext` or `:tangle file.ext`)
+
+3. Basic `:noweb` syntax (See [Noweb Reference Syntax](https://orgmode.org/manual/Noweb-Reference-Syntax.html)):
+   1. `:noweb no` - Do not expand any references
+   2. `:noweb yes` - Expand references via `#+name` directive on block. See example below.
+   3. `:noweb tangle` - Same as `:noweb yes`
+
+Example: Having this file in `~/org/todos.org`
+```org
+* Headline 1
+  Content
+  Block below will pick up reference from the 2nd block name
+
+  #+begin_src lua :tangle yes :noweb yes
+  <<headline2block>>
+  print('Headline 1')
+  #+end_src
+
+* Headline 2
+  Content
+  #+name: headline2block
+  #+begin_src lua :tangle yes
+  print('Headline 2')
+  #+end_src
+```
+
+Running [org_babel_tangle](#org_babel_tangle) will create file `~/org/todos.lua` with this content:
+```lua
+print('Headline 2')
+print('Headline 1')
+
+print('Headline 2')
+```
+
+To extract blocks to specific file, you can set file level property with default path, and maybe exclude 2nd block to not be repeated:
+
+```org
+#+property: header-args :tangle ./my_tangled_file.lua
+* Headline 1
+  Content
+  #+begin_src lua :noweb yes
+  <<headline2block>>
+  print('Headline 1')
+  #+end_src
+
+* Headline 2
+  Content
+  Here we disable tangling, so only first block will give results with the noweb
+  #+name: headline2block
+  #+begin_src lua :tangle no
+  print('Headline 2')
+  #+end_src
+```
+
+Running [org_babel_tangle](#org_babel_tangle) will create file `~/org/my_tangled_file.lua` with this content:
+```lua
+print('Headline 2')
+print('Headline 1')
+```
+
 ## Changelog
 To track breaking changes, subscribe to [Notice of breaking changes](https://github.com/nvim-orgmode/orgmode/issues/217) issue where those are announced.
+
+#### 25 February 2024
+
+* Add support for extracting source code [Extract source code (tangle)](#extract-source-code-tangle)
+
+#### 21 January 2024
+
+* Option `org_indent_mode` was deprecated in favor of [org_startup_indented](#org_startup_indented). To remove the
+  warning use `org_startup_indented`. This was introduced to support Virtual Indent more in line with Emacs.
 
 #### 24 October 2021
 * Help mapping was changed from `?` to `g?` to avoid conflict with built in backward search. See issue [#106](https://github.com/nvim-orgmode/orgmode/issues/106).

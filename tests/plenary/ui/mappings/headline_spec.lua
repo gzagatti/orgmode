@@ -1,4 +1,5 @@
-local helpers = require('tests.plenary.ui.helpers')
+local helpers = require('tests.plenary.helpers')
+local config = require('orgmode.config')
 
 describe('Heading mappings', function()
   after_each(function()
@@ -6,7 +7,7 @@ describe('Heading mappings', function()
   end)
 
   it('should toggle the current line into a headline and vice versa', function()
-    helpers.load_file_content({
+    helpers.create_file({
       'top level line',
       '* top level heading',
       '  simple line',
@@ -53,7 +54,7 @@ describe('Heading mappings', function()
   end)
 
   it('should demote the heading (org_do_demote)', function()
-    helpers.load_file_content({
+    helpers.create_file({
       '#TITLE: Test',
       '',
       '* TODO Test orgmode',
@@ -68,7 +69,7 @@ describe('Heading mappings', function()
   end)
 
   it('should demote the heading and its subtree (org_demote_subtree)', function()
-    helpers.load_file_content({
+    helpers.create_file({
       '#TITLE: Test',
       '',
       '* TODO Test orgmode',
@@ -90,30 +91,56 @@ describe('Heading mappings', function()
       'Content Level 3',
     }, vim.api.nvim_buf_get_lines(0, 2, 8, false))
     vim.fn.cursor(3, 1)
+    local check
+    if config.org_adapt_indentation then
+      check = {
+        '** TODO Test orgmode',
+        '   DEADLINE: <2021-07-21 Wed 22:02>',
+        '*** TODO [#A] Test orgmode level 2 :PRIVATE:',
+        ' Some content for level 2',
+        '**** NEXT [#1] Level 3',
+        ' Content Level 3',
+      }
+    else
+      check = {
+        '** TODO Test orgmode',
+        'DEADLINE: <2021-07-21 Wed 22:02>',
+        '*** TODO [#A] Test orgmode level 2 :PRIVATE:',
+        'Some content for level 2',
+        '**** NEXT [#1] Level 3',
+        'Content Level 3',
+      }
+    end
     vim.cmd([[norm >s]])
-    assert.are.same({
-      '** TODO Test orgmode',
-      '   DEADLINE: <2021-07-21 Wed 22:02>',
-      '*** TODO [#A] Test orgmode level 2 :PRIVATE:',
-      ' Some content for level 2',
-      '**** NEXT [#1] Level 3',
-      ' Content Level 3',
-    }, vim.api.nvim_buf_get_lines(0, 2, 8, false))
+    assert.are.same(check, vim.api.nvim_buf_get_lines(0, 2, 8, false))
 
     -- Support count
+    local check
+    if config.org_adapt_indentation then
+      check = {
+        '****** TODO Test orgmode',
+        '       DEADLINE: <2021-07-21 Wed 22:02>',
+        '******* TODO [#A] Test orgmode level 2 :PRIVATE:',
+        '     Some content for level 2',
+        '******** NEXT [#1] Level 3',
+        '     Content Level 3',
+      }
+    else
+      check = {
+        '****** TODO Test orgmode',
+        'DEADLINE: <2021-07-21 Wed 22:02>',
+        '******* TODO [#A] Test orgmode level 2 :PRIVATE:',
+        'Some content for level 2',
+        '******** NEXT [#1] Level 3',
+        'Content Level 3',
+      }
+    end
     vim.cmd([[norm 4>s]])
-    assert.are.same({
-      '****** TODO Test orgmode',
-      '       DEADLINE: <2021-07-21 Wed 22:02>',
-      '******* TODO [#A] Test orgmode level 2 :PRIVATE:',
-      '     Some content for level 2',
-      '******** NEXT [#1] Level 3',
-      '     Content Level 3',
-    }, vim.api.nvim_buf_get_lines(0, 2, 8, false))
+    assert.are.same(check, vim.api.nvim_buf_get_lines(0, 2, 8, false))
   end)
 
   it('should promote the heading (org_do_promote)', function()
-    helpers.load_file_content({
+    helpers.create_file({
       '#TITLE: Test',
       '',
       '* TODO Test orgmode',
@@ -134,7 +161,7 @@ describe('Heading mappings', function()
   end)
 
   it('should promote the heading and its subtree (org_promote_subtree)', function()
-    helpers.load_file_content({
+    helpers.create_file({
       '#TITLE: Test',
       '',
       '* TODO Test orgmode',
@@ -166,7 +193,7 @@ describe('Heading mappings', function()
       'Content Level 3',
     }, vim.api.nvim_buf_get_lines(0, 2, 8, false))
 
-    helpers.load_file_content({
+    helpers.create_file({
       '***** TODO Test orgmode',
       '      DEADLINE: <2021-07-21 Wed 22:02>',
       '****** TODO [#A] Test orgmode level 2 :PRIVATE:',
@@ -177,44 +204,70 @@ describe('Heading mappings', function()
     vim.fn.cursor(1, 1)
 
     -- Support count
+    local check
+    if config.org_adapt_indentation then
+      check = {
+        '*** TODO Test orgmode',
+        '    DEADLINE: <2021-07-21 Wed 22:02>',
+        '**** TODO [#A] Test orgmode level 2 :PRIVATE:',
+        '     Some content for level 2',
+        '***** NEXT [#1] Level 3',
+        '      Content Level 3',
+      }
+    else
+      check = {
+        '*** TODO Test orgmode',
+        'DEADLINE: <2021-07-21 Wed 22:02>',
+        '**** TODO [#A] Test orgmode level 2 :PRIVATE:',
+        'Some content for level 2',
+        '***** NEXT [#1] Level 3',
+        'Content Level 3',
+      }
+    end
     vim.cmd([[norm 2<s]])
-    assert.are.same({
-      '*** TODO Test orgmode',
-      '    DEADLINE: <2021-07-21 Wed 22:02>',
-      '**** TODO [#A] Test orgmode level 2 :PRIVATE:',
-      '     Some content for level 2',
-      '***** NEXT [#1] Level 3',
-      '      Content Level 3',
-    }, vim.api.nvim_buf_get_lines(0, 0, 6, false))
+    assert.are.same(check, vim.api.nvim_buf_get_lines(0, 0, 6, false))
 
     -- Handle overflow
+    local check
+    if config.org_adapt_indentation then
+      check = {
+        '* TODO Test orgmode',
+        '  DEADLINE: <2021-07-21 Wed 22:02>',
+        '** TODO [#A] Test orgmode level 2 :PRIVATE:',
+        '   Some content for level 2',
+        '*** NEXT [#1] Level 3',
+        '    Content Level 3',
+      }
+    else
+      check = {
+        '* TODO Test orgmode',
+        'DEADLINE: <2021-07-21 Wed 22:02>',
+        '** TODO [#A] Test orgmode level 2 :PRIVATE:',
+        'Some content for level 2',
+        '*** NEXT [#1] Level 3',
+        'Content Level 3',
+      }
+    end
     vim.cmd([[norm 5<s]])
-    assert.are.same({
-      '* TODO Test orgmode',
-      '  DEADLINE: <2021-07-21 Wed 22:02>',
-      '** TODO [#A] Test orgmode level 2 :PRIVATE:',
-      '   Some content for level 2',
-      '*** NEXT [#1] Level 3',
-      '    Content Level 3',
-    }, vim.api.nvim_buf_get_lines(0, 0, 6, false))
+    assert.are.same(check, vim.api.nvim_buf_get_lines(0, 0, 6, false))
   end)
 
   it('should promote line to (TODO) heading', function()
-    helpers.load_file_content({ 'foobar' })
+    helpers.create_file({ 'foobar' })
     vim.fn.cursor(1, 1)
     vim.cmd([[norm ,oiT]])
     assert.are.same({
       '* TODO foobar',
     }, vim.api.nvim_buf_get_lines(0, 0, 2, false))
 
-    helpers.load_file_content({ 'foobar' })
+    helpers.create_file({ 'foobar' })
     vim.fn.cursor(1, 1)
     vim.cmd([[norm ,oit]])
     assert.are.same({
       '* TODO foobar',
     }, vim.api.nvim_buf_get_lines(0, 0, 2, false))
 
-    helpers.load_file_content({ 'foobar' })
+    helpers.create_file({ 'foobar' })
     vim.fn.cursor(1, 1)
     vim.cmd([[norm ,oih]])
     assert.are.same({
@@ -223,7 +276,7 @@ describe('Heading mappings', function()
   end)
 
   it('should promote line left of the cursor to (TODO) heading', function()
-    helpers.load_file_content({ 'foobar' })
+    helpers.create_file({ 'foobar' })
     vim.fn.cursor(1, 4)
     vim.cmd([[norm ,oiT]])
     assert.are.same({
@@ -231,7 +284,7 @@ describe('Heading mappings', function()
       '* TODO bar',
     }, vim.api.nvim_buf_get_lines(0, 0, 2, false))
 
-    helpers.load_file_content({ 'foobar' })
+    helpers.create_file({ 'foobar' })
     vim.fn.cursor(1, 4)
     vim.cmd([[norm ,oit]])
     assert.are.same({
@@ -239,7 +292,7 @@ describe('Heading mappings', function()
       '* TODO bar',
     }, vim.api.nvim_buf_get_lines(0, 0, 2, false))
 
-    helpers.load_file_content({ 'foobar' })
+    helpers.create_file({ 'foobar' })
     vim.fn.cursor(1, 4)
     vim.cmd([[norm ,oih]])
     assert.are.same({
@@ -249,7 +302,7 @@ describe('Heading mappings', function()
   end)
 
   it('should move subtree up (org_move_subtree_up)', function()
-    helpers.load_file_content({
+    helpers.create_file({
       '#TITLE: Test',
       '',
       '* TODO Test orgmode',
@@ -290,7 +343,7 @@ describe('Heading mappings', function()
   end)
 
   it('should move subtree down (org_move_subtree_down)', function()
-    helpers.load_file_content({
+    helpers.create_file({
       '#TITLE: Test',
       '',
       '* TODO Test orgmode',
@@ -352,7 +405,7 @@ describe('Heading mappings', function()
   end)
 
   it('should jump to next heading on any level (org_next_visible_heading)', function()
-    helpers.load_file_content({
+    helpers.create_file({
       '#TITLE: Test',
       '',
       '* TODO Test orgmode',
@@ -390,7 +443,7 @@ describe('Heading mappings', function()
   end)
 
   it('should jump to previous heading on any level (org_previous_visible_heading)', function()
-    helpers.load_file_content({
+    helpers.create_file({
       '#TITLE: Test',
       '',
       '* TODO Test orgmode',
@@ -430,7 +483,7 @@ describe('Heading mappings', function()
   end)
 
   it('should jump to next heading on same level (org_backward_heading_same_level)', function()
-    helpers.load_file_content({
+    helpers.create_file({
       '#TITLE: Test',
       '',
       '* TODO Test orgmode',
@@ -462,7 +515,7 @@ describe('Heading mappings', function()
   end)
 
   it('should jump to previous heading on same level (org_backward_heading_same_level)', function()
-    helpers.load_file_content({
+    helpers.create_file({
       '#TITLE: Test',
       '',
       '* TODO Test orgmode',
@@ -495,7 +548,7 @@ describe('Heading mappings', function()
   end)
 
   it('should walk up to parent headline (outline_up_heading)', function()
-    helpers.load_file_content({
+    helpers.create_file({
       '#TITLE: Test',
       '',
       '* TODO Test orgmode',

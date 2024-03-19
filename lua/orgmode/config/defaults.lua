@@ -1,8 +1,11 @@
----@class DefaultConfig
+---@class OrgDefaultConfig
+---@field org_id_method 'uuid' | 'ts' | 'org'
+---@field org_agenda_span 'day' | 'week' | 'month' | 'year' | number
 local DefaultConfig = {
   org_agenda_files = '',
   org_default_notes_file = '',
   org_todo_keywords = { 'TODO', '|', 'DONE' },
+  org_todo_repeat_to_state = nil,
   org_todo_keyword_faces = {},
   org_deadline_warning_days = 14,
   org_agenda_min_height = 16,
@@ -34,7 +37,10 @@ local DefaultConfig = {
   org_log_into_drawer = nil,
   org_highlight_latex_and_related = nil,
   org_custom_exports = {},
-  org_indent_mode = 'indent',
+  org_adapt_indentation = true,
+  org_startup_indented = false,
+  org_indent_mode_turns_off_org_adapt_indentation = true,
+  org_indent_mode_turns_on_hiding_stars = true,
   org_time_stamp_rounding_minutes = 5,
   org_blank_before_new_entry = {
     heading = true,
@@ -42,6 +48,15 @@ local DefaultConfig = {
   },
   org_src_window_setup = 'top 16new',
   org_edit_src_content_indentation = 0,
+  org_id_uuid_program = 'uuidgen',
+  org_id_ts_format = '%Y%m%d%H%M%S',
+  org_id_method = 'uuid',
+  org_id_prefix = nil,
+  org_id_link_to_org_use_id = false,
+  org_babel_default_header_args = {
+    [':tangle'] = 'no',
+    [':noweb'] = 'no',
+  },
   win_split_mode = 'horizontal',
   win_border = 'single',
   notifications = {
@@ -55,6 +70,7 @@ local DefaultConfig = {
   },
   mappings = {
     disable_all = false,
+    org_return_uses_meta_return = false,
     prefix = '<Leader>o',
     global = {
       org_agenda = '<prefix>a',
@@ -89,6 +105,7 @@ local DefaultConfig = {
       org_agenda_deadline = '<prefix>id',
       org_agenda_schedule = '<prefix>is',
       org_agenda_filter = '/',
+      org_agenda_refile = '<prefix>r',
       org_agenda_show_help = 'g?',
     },
     capture = {
@@ -144,13 +161,15 @@ local DefaultConfig = {
       org_schedule = '<prefix>is',
       org_time_stamp = '<prefix>i.',
       org_time_stamp_inactive = '<prefix>i!',
-      org_insert_link = '<prefix>il',
+      org_insert_link = '<prefix>li',
+      org_store_link = '<prefix>ls',
       org_clock_in = '<prefix>xi',
       org_clock_out = '<prefix>xo',
       org_clock_cancel = '<prefix>xq',
       org_clock_goto = '<prefix>xj',
       org_set_effort = '<prefix>xe',
       org_show_help = 'g?',
+      org_babel_tangle = '<prefix>bt',
     },
     edit_src = {
       org_edit_src_abort = '<prefix>k',
